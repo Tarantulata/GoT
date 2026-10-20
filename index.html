@@ -147,32 +147,36 @@ function getRanked(){return rankedPlayers(histories[currentBoard]);}
 function rankingTable(games, overall){
  const ranked=rankedPlayers(games);
  const secondHeading=overall?'Player':'Player / house';
- const rows=ranked.length?ranked.map((p,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(overall?p.name:(p.house?`${p.name} (${p.house})`:p.name))}</td><td>${p.points}</td><td>${p.games}</td><td>${p.durationGames?formatDuration(Math.round(p.totalDuration/p.durationGames)):'—'}</td><td>${escapeHtml(p.lastPlayed)}</td></tr>`).join(''):`<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:24px 5px">No games recorded yet.</td></tr>`;
- return `<table class="score-table"><thead><tr><th>#</th><th>${secondHeading}</th><th>Pts</th><th>Games</th><th>Avg. duration</th><th>Last played</th></tr></thead><tbody>${rows}</tbody></table>`;
+ const rows=ranked.length?ranked.map((p,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(overall?p.name:(p.house?`${p.name} (${p.house})`:p.name))}</td><td>${p.points}</td><td>${p.games}</td><td>${overall?(p.totalDuration>0?formatDuration(p.totalDuration):'—'):(p.durationGames?formatDuration(Math.round(p.totalDuration/p.durationGames)):'—')}</td><td>${escapeHtml(p.lastPlayed)}</td></tr>`).join(''):`<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:24px 5px">No games recorded yet.</td></tr>`;
+ const durationHeading=overall?'Duration':'Avg. duration';
+ return `<table class="score-table"><thead><tr><th>#</th><th>${secondHeading}</th><th>Pts</th><th>Games</th><th>${durationHeading}</th><th>Last played</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
+let selectedGameKey='';
 function renderRanking(){
  const games=histories[currentBoard].slice().sort((a,b)=>b.date.localeCompare(a.date)||String(b.id).localeCompare(String(a.id)));
  const overall=rankedPlayers(games);
  const groups=new Map();
- for(const game of games){const name=String(game.name||'Unnamed game').trim()||'Unnamed game';const key=name.toLocaleLowerCase();if(!groups.has(key))groups.set(key,{name,games:[]});groups.get(key).games.push(game);}
+ for(const game of games){const name=String(game.name||'Unnamed game').trim()||'Unnamed game';const key=name.toLocaleLowerCase();if(!groups.has(key))groups.set(key,{key,name,games:[]});groups.get(key).games.push(game);}
+ if(!groups.has(selectedGameKey))selectedGameKey=groups.size?[...groups.keys()][0]:'';
  let sections=`<section class="ranking-section"><h4>Overall</h4><div class="sub">Combined standings across all games</div>${rankingTable(games,true)}</section>`;
  if(groups.size){
-  for(const group of groups.values()){
-   const entries=group.games.flatMap(g=>g.players.map(p=>({...p,_game:g})));
-   const byPlayer=new Map();
-   for(const e of entries){const k=playerKey(e.name);if(!k)continue;if(!byPlayer.has(k))byPlayer.set(k,{name:String(e.name||'').trim(),house:e.house||'',points:0,games:0,lastPlayed:e._game.date,wins:0,totalDuration:0,durationGames:0});const x=byPlayer.get(k);x.points+=Number(e.points)||0;x.games++;if(e._game.date>x.lastPlayed)x.lastPlayed=e._game.date;if(Number(e.position)===1)x.wins++;if(Number(e._game.duration)>0){x.totalDuration+=Number(e._game.duration);x.durationGames++;}if(e.house)x.house=e.house;}
-   const ranked=[...byPlayer.values()].sort((a,b)=>b.points-a.points||b.wins-a.wins||b.games-a.games||a.name.localeCompare(b.name));
-   const rows=ranked.map((p,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(p.name)}${p.house?` (${escapeHtml(p.house)})`:''}</td><td>${p.points}</td><td>${p.games}</td><td>${p.durationGames?formatDuration(Math.round(p.totalDuration/p.durationGames)):'—'}</td><td>${escapeHtml(p.lastPlayed)}</td></tr>`).join('');
-   sections+=`<section class="ranking-section"><h4>${escapeHtml(group.name)}</h4><div class="sub">${group.games.length} recorded game${group.games.length===1?'':'s'}</div><table class="score-table"><thead><tr><th>#</th><th>Player / house</th><th>Pts</th><th>Games</th><th>Avg. duration</th><th>Last played</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No players recorded.</td></tr>'}</tbody></table></section>`;
-  }
+  sections+=`<section class="ranking-section"><h4>Recorded games</h4><div class="sub">Select a game to view its results</div><div class="actions game-picker">${[...groups.values()].map(group=>`<button type="button" class="${group.key===selectedGameKey?'gold-btn':'ghost-btn'}" data-game-key="${escapeHtml(group.key)}">${escapeHtml(group.name)}${group.games.length>1?` (${group.games.length})`:''}</button>`).join('')}</div></section>`;
+  const group=groups.get(selectedGameKey)||[...groups.values()][0];
+  const entries=group.games.flatMap(g=>g.players.map(p=>({...p,_game:g})));
+  const byPlayer=new Map();
+  for(const e of entries){const k=playerKey(e.name);if(!k)continue;if(!byPlayer.has(k))byPlayer.set(k,{name:String(e.name||'').trim(),house:e.house||'',points:0,games:0,lastPlayed:e._game.date,wins:0,totalDuration:0,durationGames:0});const x=byPlayer.get(k);x.points+=Number(e.points)||0;x.games++;if(e._game.date>x.lastPlayed)x.lastPlayed=e._game.date;if(Number(e.position)===1)x.wins++;if(Number(e._game.duration)>0){x.totalDuration+=Number(e._game.duration);x.durationGames++;}if(e.house)x.house=e.house;}
+  const ranked=[...byPlayer.values()].sort((a,b)=>b.points-a.points||b.wins-a.wins||b.games-a.games||a.name.localeCompare(b.name));
+  const rows=ranked.map((p,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(p.name)}${p.house?` (${escapeHtml(p.house)})`:''}</td><td>${p.points}</td><td>${p.games}</td><td>${p.durationGames?formatDuration(Math.round(p.totalDuration/p.durationGames)):'—'}</td><td>${escapeHtml(p.lastPlayed)}</td></tr>`).join('');
+  sections+=`<section class="ranking-section"><h4>${escapeHtml(group.name)}</h4><div class="sub">${group.games.length} recorded game${group.games.length===1?'':'s'}</div><table class="score-table"><thead><tr><th>#</th><th>Player / house</th><th>Pts</th><th>Games</th><th>Avg. duration</th><th>Last played</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No players recorded.</td></tr>'}</tbody></table></section>`;
  }
  $('#ranking-sections').innerHTML=sections;
+ $$('#ranking-sections [data-game-key]').forEach(button=>button.addEventListener('click',()=>{selectedGameKey=button.dataset.gameKey;renderRanking();}));
  if(!overall.length){if(!loading)setStatus('No shared games recorded yet. Add a game to start the league table.');return;}
  const leaders=overall.filter(p=>p.points===overall[0].points);
  if(!loading)setStatus(leaders.length>1?`League lead tied: ${leaders.map(p=>p.name).join(', ')} · ${overall[0].points} points`:`League leader: ${overall[0].name} · ${overall[0].points} points across ${overall[0].games} game${overall[0].games===1?'':'s'}`);
 }
 async function refreshAll(){loading=true;setStatus('Loading shared game history…');const ok=await loadHistory('base');const ok2=await loadHistory('expansion');loading=false;renderRanking();if(ok&&ok2)setStatus('Connected to the shared GoT Tracker database.');}
-$$('[data-board]').forEach(btn=>btn.addEventListener('click',async()=>{currentBoard=btn.dataset.board;$$('[data-board]').forEach(b=>b.classList.toggle('active',b===btn));$('#game-date').value=today();$('#game-duration').value='';renderFields();loading=true;setStatus('Refreshing shared rankings…');const ok=await loadHistory(currentBoard);loading=false;renderRanking();if(ok)setStatus('Shared rankings updated.');}));
+$$('[data-board]').forEach(btn=>btn.addEventListener('click',async()=>{currentBoard=btn.dataset.board;selectedGameKey='';$$('[data-board]').forEach(b=>b.classList.toggle('active',b===btn));$('#game-date').value=today();$('#game-duration').value='';renderFields();loading=true;setStatus('Refreshing shared rankings…');const ok=await loadHistory(currentBoard);loading=false;renderRanking();if(ok)setStatus('Shared rankings updated.');}));
 $('#save-board').addEventListener('click',async()=>{
  if(loading)return;
  const entries=forms[currentBoard].map(p=>({name:p.name.trim(),house:p.house,position:Number(p.position)})).filter(p=>p.name||p.house||p.position);
@@ -196,7 +200,7 @@ $('#save-board').addEventListener('click',async()=>{
 });
 $('#reset-board').addEventListener('click',()=>{forms[currentBoard]=blankPlayers(currentBoard);$('#game-name').value='';$('#game-date').value=today();$('#game-duration').value='';renderFields();});
 
-$('#export-csv').addEventListener('click',()=>{const rows=[['Rank','Player','Total points','Games played','Wins','Average game duration','Last played'],...getRanked().map((p,i)=>[i+1,p.name,p.points,p.games,p.wins,p.durationGames?formatDuration(Math.round(p.totalDuration/p.durationGames)):'',p.lastPlayed])];const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));a.download=`got-tracker-${currentBoard}-rankings.csv`;a.click();URL.revokeObjectURL(a.href);});
+$('#export-csv').addEventListener('click',()=>{const rows=[['Rank','Player','Total points','Games played','Wins','Total duration','Last played'],...getRanked().map((p,i)=>[i+1,p.name,p.points,p.games,p.wins,p.totalDuration?formatDuration(p.totalDuration):'',p.lastPlayed])];const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));a.download=`got-tracker-${currentBoard}-rankings.csv`;a.click();URL.revokeObjectURL(a.href);});
 const video=$('iframe[title="video tutorial"]');if(video){video.src='https://www.youtube.com/embed/_ADpwjcBqS0?start=0&rel=0&playsinline=1';video.referrerPolicy='strict-origin-when-cross-origin';}
 renderFields();refreshAll();
 </script>
